@@ -1,5 +1,6 @@
 #include "routes.h"
 #include "media_manager.h"
+#include "hls_processor.h"
 #include <iostream>
 #include <chrono>
 #include <iomanip>
@@ -168,48 +169,46 @@ void setup_routes(SimpleServer& server) {
     });
     
     // Media list
-    server.get("/api/media/list", [](const std::string&) -> std::string {
-        auto& media_mgr = MediaManager::get_instance();
-        auto media_files = media_mgr.get_all_media();
-        
-        std::stringstream ss;
-        ss << "HTTP/1.1 200 OK\r\n"
-           << "Content-Type: application/json\r\n"
-           << "Connection: close\r\n"
-           << "\r\n"
-           << "{\"media_files\": [";
-        
-        for (size_t i = 0; i < media_files.size(); ++i) {
-            const auto& file = media_files[i];
-            auto json_data = file.to_json();
-            
-            ss << "{";
-            bool first = true;
-            for (const auto& [key, value] : json_data) {
-                if (!first) ss << ", ";
-                ss << "\"" << key << "\": ";
-                
-                // Check if value is numeric
-                bool is_numeric = !value.empty() && std::all_of(value.begin(), value.end(), 
-                    [](char c) { return std::isdigit(c) || c == '.'; });
-                
-                if (is_numeric) {
-                    ss << value;
-                } else {
-                    ss << "\"" << value << "\"";
-                }
-                first = false;
-            }
-            ss << "}";
-            
-            if (i < media_files.size() - 1) {
-                ss << ",";
-            }
-        }
-        
-        ss << "], \"count\": " << media_files.size() << "}";
-        return ss.str();
-    });
+	server.get("/api/media/list", [](const std::string&) -> std::string {
+		auto& media_mgr = MediaManager::get_instance();
+		auto media_files = media_mgr.get_all_media();
+		
+		std::stringstream ss;
+		ss << "HTTP/1.1 200 OK\r\n"
+		   << "Content-Type: application/json\r\n"
+		   << "Connection: close\r\n"
+		   << "\r\n";
+		
+		if (media_files.empty()) {
+			ss << "{\"media_files\":[],\"count\":0,\"message\":\"No media files found\"}";
+		} else {
+			ss << "{\"media_files\":[";
+			
+			for (size_t i = 0; i < media_files.size(); ++i) {
+				const auto& file = media_files[i];
+				
+				// 使用简洁的格式，确保id字段正确
+				ss << "{";
+				ss << "\"id\":\"" << file.id << "\",";
+				ss << "\"filename\":\"" << file.filename << "\",";
+				ss << "\"path\":\"" << file.path << "\",";
+				ss << "\"duration\":\"" << file.duration << "\",";
+				ss << "\"width\":\"" << file.width << "\",";
+				ss << "\"height\":\"" << file.height << "\",";
+				ss << "\"video_codec\":\"" << file.video_codec << "\",";
+				ss << "\"audio_codec\":\"" << file.audio_codec << "\"";
+				ss << "}";
+				
+				if (i < media_files.size() - 1) {
+					ss << ",";
+				}
+			}
+			
+			ss << "],\"count\":" << media_files.size() << "}";
+		}
+		
+		return ss.str();
+	});
     
     // Rescan media directory
     server.get("/api/media/scan", [](const std::string&) -> std::string {
@@ -369,7 +368,320 @@ void setup_routes(SimpleServer& server) {
         
         return serve_static_file(full_path);
     });
+
+    // 3. HLS 流媒体路由
+    // 创建 HLS 流
+	server.get("/api/hls/create", [](const std::string& request) -> std::string {
+		std::cout << "[API] 处理 /api/hls/create 请求" << std::endl;
+		
+		// 解析请求
+		std::istringstream request_stream(request);
+		std::string method, full_path, version;
+		request_stream >> method >> full_path >> version;
+		
+		// 提取查询参数
+		size_t query_start = full_path.find('?');
+		std::string query_string = (query_start != std::string::npos) ? full_path.substr(query_start + 1) : "";
+		std::string path = (query_start != std::string::npos) ? full_path.substr(0, query_start) : full_path;
+		
+		std::cout << "[API] 完整路径: " << full_path << std::endl;
+		std::cout << "[API] 查询字符串: " << query_string << std::endl;
+		
+		// 简单的参数解析
+		std::string media_id;
+		size_t media_pos = query_string.find("media_id=");
+		if (media_pos != std::string::npos) {
+			media_id = query_string.substr(media_pos + 9);
+			// 移除可能的多余参数
+			size_t amp_pos = media_id.find('&');
+			if (amp_pos != std::string::npos) {
+				media_id = media_id.substr(0, amp_pos);
+			}
+		}
+		
+		if (media_id.empty()) {
+			std::cout << "[API] 错误: 缺少 media_id 参数" << std::endl;
+			return "HTTP/1.1 400 Bad Request\r\n"
+				   "Content-Type: application/json\r\n"
+				   "Connection: close\r\n"
+				   "\r\n"
+				   "{\"success\":false,\"error\":\"Missing media_id parameter\"}";
+		}
+		
+		std::cout << "[API] 媒体ID: " << media_id << std::endl;
+		
+		// 获取媒体管理器实例
+		auto& media_mgr = MediaManager::get_instance();
+		auto media_files = media_mgr.get_all_media();
+		
+		// 查找媒体文件
+		std::string media_path;
+		for (const auto& media : media_files) {
+			std::cout << "[API] 检查媒体: ID='" << media.id << "', 文件名='" << media.filename << "'" << std::endl;
+			if (media.id == media_id) {
+				media_path = media.path;
+				break;
+			}
+		}
+		
+		if (media_path.empty()) {
+			std::string error_msg = "Media not found. Available IDs: ";
+			for (const auto& media : media_files) {
+				error_msg += media.id + ", ";
+			}
+			
+			return "HTTP/1.1 404 Not Found\r\n"
+				   "Content-Type: application/json\r\n"
+				   "Connection: close\r\n"
+				   "\r\n"
+				   "{\"success\":false,\"error\":\"" + error_msg + "\"}";
+		}
+		
+		std::cout << "[API] 找到媒体文件: " << media_path << std::endl;
+		
+		// 创建流配置
+		HLSStreamConfig config;
+		config.stream_id = "stream_" + media_id;
+		config.media_path = media_path;
+		config.media_id = media_id;
+		config.output_dir = "../media/hls/streams/" + config.stream_id;
+		config.playlist_path = config.output_dir + "/playlist.m3u8";
+		config.segment_prefix = "segment";
+		config.segment_duration = 4;
+		config.max_segments = 10;
+		
+		// 创建流
+		auto& hls_processor = HLSProcessor::get_instance();
+		bool success = hls_processor.create_stream(media_path, media_id, config);
+		
+		if (success) {
+			std::stringstream ss;
+			ss << "HTTP/1.1 200 OK\r\n"
+			   << "Content-Type: application/json\r\n"
+			   << "Connection: close\r\n"
+			   << "\r\n"
+			   << "{\"success\":true,\"stream_id\":\"" << config.stream_id 
+			   << "\",\"message\":\"Stream created\"}";
+			return ss.str();
+		} else {
+			return "HTTP/1.1 500 Internal Server Error\r\n"
+				   "Content-Type: application/json\r\n"
+				   "Connection: close\r\n"
+				   "\r\n"
+				   "{\"success\":false,\"error\":\"Failed to create stream\"}";
+		}
+	});
     
+    // 获取 HLS 流状态
+    server.get("/api/hls/status/:stream_id", [](const std::string& request) -> std::string {
+        // 从请求中提取 stream_id
+        std::istringstream request_stream(request);
+        std::string method, full_path, version;
+        request_stream >> method >> full_path >> version;
+        
+        // 解析路径 /api/hls/status/{stream_id}
+        std::vector<std::string> parts;
+        size_t start = 0;
+        while (true) {
+            size_t end = full_path.find('/', start);
+            if (end == std::string::npos) {
+                parts.push_back(full_path.substr(start));
+                break;
+            }
+            parts.push_back(full_path.substr(start, end - start));
+            start = end + 1;
+        }
+        
+        if (parts.size() < 4) {
+            return "HTTP/1.1 400 Bad Request\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Connection: close\r\n"
+                   "\r\n"
+                   "{\"error\": \"Invalid path\"}";
+        }
+        
+        std::string stream_id = parts[3];
+        
+        auto& hls_processor = HLSProcessor::get_instance();
+        auto status = hls_processor.get_stream_status(stream_id);
+        auto json_data = status.to_json();
+        
+        std::stringstream ss;
+        ss << "HTTP/1.1 200 OK\r\n"
+           << "Content-Type: application/json\r\n"
+           << "Connection: close\r\n"
+           << "\r\n"
+           << "{";
+        
+        bool first = true;
+        for (const auto& [key, value] : json_data) {
+            if (!first) ss << ", ";
+            ss << "\"" << key << "\": \"" << value << "\"";
+            first = false;
+        }
+        ss << "}";
+        
+        return ss.str();
+    });
+    
+    // 获取 HLS 播放列表
+    // 在播放列表路由中添加CORS头
+	server.get("/hls/:stream_id/playlist.m3u8", [](const std::string& request) -> std::string {
+		std::istringstream request_stream(request);
+		std::string method, full_path, version;
+		request_stream >> method >> full_path >> version;
+		
+		// 提取 stream_id
+		size_t start = full_path.find("/hls/") + 5;
+		size_t end = full_path.find("/playlist.m3u8");
+		std::string stream_id = full_path.substr(start, end - start);
+		
+		std::cout << "[HLS] 获取播放列表: " << stream_id << std::endl;
+		
+		auto& hls_processor = HLSProcessor::get_instance();
+		std::string playlist = hls_processor.get_playlist(stream_id);
+		
+		if (playlist.empty()) {
+			return "HTTP/1.1 404 Not Found\r\n"
+				   "Content-Type: text/plain\r\n"
+				   "Connection: close\r\n"
+				   "\r\n"
+				   "Playlist not found";
+		}
+		
+		// 🔧 修复: 添加CORS头和正确的MIME类型
+		std::string response = "HTTP/1.1 200 OK\r\n";
+		response += "Content-Type: application/vnd.apple.mpegurl\r\n";
+		response += "Access-Control-Allow-Origin: *\r\n";  // 添加CORS
+		response += "Access-Control-Expose-Headers: Content-Length\r\n";
+		response += "Cache-Control: no-cache\r\n";
+		response += "Connection: close\r\n";
+		response += "\r\n";
+		response += playlist;
+		
+		return response;
+	});
+
+	// 在分片文件路由中也添加CORS头
+	server.get("/hls/:stream_id/:segment", [](const std::string& request) -> std::string {
+		std::istringstream request_stream(request);
+		std::string method, full_path, version;
+		request_stream >> method >> full_path >> version;
+		
+		// 提取 stream_id 和 segment_name
+		size_t hls_pos = full_path.find("/hls/") + 5;
+		size_t segment_pos = full_path.find('/', hls_pos);
+		
+		if (segment_pos == std::string::npos) {
+			return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nInvalid path";
+		}
+		
+		std::string stream_id = full_path.substr(hls_pos, segment_pos - hls_pos);
+		std::string segment_name = full_path.substr(segment_pos + 1);
+		
+		std::cout << "[HLS] 获取分片: " << stream_id << "/" << segment_name << std::endl;
+		
+		auto& hls_processor = HLSProcessor::get_instance();
+		auto segment_data = hls_processor.get_segment(stream_id, segment_name);
+		
+		if (segment_data.empty()) {
+			return "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nSegment not found";
+		}
+		
+		// 🔧 修复: 添加CORS头
+		std::string response = "HTTP/1.1 200 OK\r\n";
+		response += "Content-Type: video/MP2T\r\n";
+		response += "Access-Control-Allow-Origin: *\r\n";  // 添加CORS
+		response += "Connection: close\r\n";
+		response += "\r\n";
+		
+		// 添加二进制数据
+		response.append(segment_data.begin(), segment_data.end());
+		
+		return response;
+	});
+    
+    // 列出所有 HLS 流
+    server.get("/api/hls/list", [](const std::string&) -> std::string {
+        auto& hls_processor = HLSProcessor::get_instance();
+        auto streams = hls_processor.list_streams();
+        
+        std::stringstream ss;
+        ss << "HTTP/1.1 200 OK\r\n"
+           << "Content-Type: application/json\r\n"
+           << "Connection: close\r\n"
+           << "\r\n"
+           << "{\"streams\": [";
+        
+        for (size_t i = 0; i < streams.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << "\"" << streams[i] << "\"";
+        }
+        
+        ss << "], \"count\": " << streams.size() << "}";
+        return ss.str();
+    });
+    
+    // 停止 HLS 流
+    server.get("/api/hls/stop/:stream_id", [](const std::string& request) -> std::string {
+        std::istringstream request_stream(request);
+        std::string method, full_path, version;
+        request_stream >> method >> full_path >> version;
+        
+        // 解析路径
+        std::vector<std::string> parts;
+        size_t start = 0;
+        while (true) {
+            size_t end = full_path.find('/', start);
+            if (end == std::string::npos) {
+                parts.push_back(full_path.substr(start));
+                break;
+            }
+            parts.push_back(full_path.substr(start, end - start));
+            start = end + 1;
+        }
+        
+        if (parts.size() < 4) {
+            return "HTTP/1.1 400 Bad Request\r\n"
+                   "Content-Type: application/json\r\n"
+                   "Connection: close\r\n"
+                   "\r\n"
+                   "{\"error\": \"Invalid path\"}";
+        }
+        
+        std::string stream_id = parts[3];
+        
+        auto& hls_processor = HLSProcessor::get_instance();
+        bool success = hls_processor.stop_stream(stream_id);
+        
+        std::stringstream ss;
+        ss << "HTTP/1.1 200 OK\r\n"
+           << "Content-Type: application/json\r\n"
+           << "Connection: close\r\n"
+           << "\r\n"
+           << "{\"success\": " << (success ? "true" : "false")
+           << ", \"message\": \"Stream stopped\", \"stream_id\": \"" << stream_id << "\"}";
+        
+        return ss.str();
+    });
+	
+	server.get("/:filename", [](const std::string& request) -> std::string {
+    std::istringstream request_stream(request);
+    std::string method, path, version;
+    request_stream >> method >> path >> version;
+    
+    // 排除 API 路由
+    if (path.find("/api/") == 0 || 
+        path.find("/hls/") == 0 ||
+        path.find("/css/") == 0 ||
+        path.find("/js/") == 0 ||
+        path.find("/images/") == 0) {
+        return "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"error\": \"Not found\"}";
+    }
+    
+    return serve_static_file(path);
+	});
+
     std::cout << "Routes setup completed" << std::endl;
     std::cout << "Web directory: ../web" << std::endl;
     std::cout << "Media directory: ../media" << std::endl;

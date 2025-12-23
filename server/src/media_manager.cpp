@@ -18,29 +18,14 @@ namespace fs = std::filesystem;
 
 std::map<std::string, std::string> MediaFile::to_json() const {
     std::map<std::string, std::string> json;
-    
     json["id"] = id;
     json["filename"] = filename;
     json["path"] = path;
-    json["size"] = std::to_string(size);
     json["duration"] = std::to_string(duration);
-    json["format"] = format;
-    json["video_codec"] = video_codec;
-    json["audio_codec"] = audio_codec;
     json["width"] = std::to_string(width);
     json["height"] = std::to_string(height);
-    json["frame_rate"] = std::to_string(frame_rate);
-    json["bitrate"] = std::to_string(bitrate);
-    json["audio_sample_rate"] = std::to_string(audio_sample_rate);
-    json["audio_channels"] = std::to_string(audio_channels);
-    json["channel_layout"] = channel_layout;
-    json["created_time"] = created_time;
-    
-    // 添加元数据
-    for (const auto& [key, value] : metadata) {
-        json["meta_" + key] = value;
-    }
-    
+    json["video_codec"] = video_codec;
+    json["audio_codec"] = audio_codec;
     return json;
 }
 

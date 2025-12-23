@@ -381,6 +381,164 @@ class MediaApp {
     }
 }
 
+// 在 app.js 中添加 HLS 播放功能
+class HLSPlayer {
+    constructor(videoElement, options = {}) {
+        this.videoElement = videoElement;
+        this.options = Object.assign({
+            autoplay: true,
+            controls: true,
+            preload: 'auto',
+            debug: false
+        }, options);
+        
+        this.hls = null;
+        this.currentStreamId = null;
+        
+        // 检查 HLS.js 是否可用
+        if (typeof Hls === 'undefined') {
+            console.error('Hls.js is not loaded');
+            return;
+        }
+    }
+    
+    // 加载 HLS 流
+    loadStream(streamId) {
+        if (!streamId) {
+            console.error('Stream ID is required');
+            return false;
+        }
+        
+        this.currentStreamId = streamId;
+        const hlsUrl = `http://${window.location.hostname}:8080/hls/${streamId}/playlist.m3u8`;
+        
+        console.log('Loading HLS stream:', hlsUrl);
+        
+        if (Hls.isSupported()) {
+            this.setupHlsJs(hlsUrl);
+        } else if (this.videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+            // Safari 原生支持
+            this.setupNativeHLS(hlsUrl);
+        } else {
+            console.error('HLS is not supported in this browser');
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // 设置 Hls.js
+    setupHlsJs(hlsUrl) {
+        if (this.hls) {
+            this.hls.destroy();
+        }
+        
+        this.hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90
+        });
+        
+        this.hls.loadSource(hlsUrl);
+        this.hls.attachMedia(this.videoElement);
+        
+        // 事件监听
+        this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS manifest loaded');
+            if (this.options.autoplay) {
+                this.videoElement.play().catch(e => {
+                    console.log('Autoplay failed:', e);
+                });
+            }
+        });
+        
+        this.hls.on(Hls.Events.ERROR, (event, data) => {
+            console.error('HLS error:', data);
+        });
+    }
+    
+    // 设置原生 HLS (Safari)
+    setupNativeHLS(hlsUrl) {
+        this.videoElement.src = hlsUrl;
+        if (this.options.autoplay) {
+            this.videoElement.play().catch(e => {
+                console.log('Autoplay failed:', e);
+            });
+        }
+    }
+    
+    // 播放
+    play() {
+        return this.videoElement.play();
+    }
+    
+    // 暂停
+    pause() {
+        this.videoElement.pause();
+    }
+    
+    // 停止
+    stop() {
+        this.pause();
+        this.videoElement.currentTime = 0;
+        if (this.hls) {
+            this.hls.destroy();
+            this.hls = null;
+        }
+    }
+    
+    // 销毁
+    destroy() {
+        this.stop();
+        this.videoElement.src = '';
+    }
+}
+
+// 更新现有的播放功能
+async function playMedia(media) {
+    try {
+        // 1. 创建 HLS 流
+        const createResponse = await api.request('GET', `/api/hls/create?media_id=${encodeURIComponent(media.id)}`);
+        
+        if (!createResponse.success) {
+            Utils.showToast('error', 'Failed to create HLS stream');
+            return;
+        }
+        
+        const streamId = createResponse.stream_id;
+        
+        // 2. 等待转码完成
+        Utils.showToast('info', 'Preparing stream...');
+        
+        let isReady = false;
+        for (let i = 0; i < 30; i++) {  // 最多等待 60 秒
+            await Utils.sleep(2000);
+            
+            const statusResponse = await api.request('GET', `/api/hls/status/${streamId}`);
+            
+            if (statusResponse.status === 'ready') {
+                isReady = true;
+                break;
+            } else if (statusResponse.status === 'error') {
+                Utils.showToast('error', `Stream error: ${statusResponse.error_message}`);
+                return;
+            }
+        }
+        
+        if (!isReady) {
+            Utils.showToast('warning', 'Stream preparation taking longer than expected');
+        }
+        
+        // 3. 打开播放器页面
+        const playerUrl = `/player.html?stream_id=${encodeURIComponent(streamId)}&media_id=${encodeURIComponent(media.id)}&filename=${encodeURIComponent(media.filename)}`;
+        window.open(playerUrl, '_blank');
+        
+    } catch (error) {
+        console.error('Failed to play media:', error);
+        Utils.showToast('error', 'Failed to play media');
+    }
+}
+
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new MediaApp();
