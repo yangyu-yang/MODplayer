@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Server</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-play-circle"></i>
+                    <h1>Media Server</h1>
+                </div>
+                <div class="header-actions">
+                    <button id="refresh-btn" class="btn btn-secondary">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <div class="server-status">
+                        <span class="status-dot status-online"></span>
+                        <span>Server Online</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="sidebar">
+                <nav class="sidebar-nav">
+                    <a href="#" class="nav-item active" data-page="media-list">
+                        <i class="fas fa-video"></i>
+                        <span>Media Library</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="server-status">
+                        <i class="fas fa-server"></i>
+                        <span>Server Status</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="settings">
+                        <i class="fas fa-cog"></i>
+                        <span>Settings</span>
+                    </a>
+                </nav>
+            </div>
+
+            <div class="content-area">
+                <!-- Media List Page -->
+                <div id="media-list-page" class="page active">
+                    <div class="page-header">
+                        <h2><i class="fas fa-video"></i> Media Library</h2>
+                        <div class="page-actions">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="search-input" placeholder="Search media...">
+                            </div>
+                            <button id="rescan-btn" class="btn btn-primary">
+                                <i class="fas fa-sync"></i> Rescan Library
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="stats-bar">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Files</span>
+                            <span class="stat-value" id="total-files">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Size</span>
+                            <span class="stat-value" id="total-size">0 MB</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Formats</span>
+                            <span class="stat-value" id="total-formats">0</span>
+                        </div>
+                    </div>
+
+                    <div class="media-grid" id="media-grid">
+                        <!-- Media items will be loaded here -->
+                        <div class="loading-placeholder">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading media files...</p>
+                        </div>
+                    </div>
+
+                    <div class="empty-state" id="empty-state" style="display: none;">
+                        <i class="fas fa-folder-open"></i>
+                        <h3>No Media Files Found</h3>
+                        <p>Your media library is empty. Add files to the "media" folder and click Rescan.</p>
+                        <button id="empty-rescan-btn" class="btn btn-primary">
+                            <i class="fas fa-sync"></i> Rescan Library
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Server Status Page -->
+                <div id="server-status-page" class="page">
+                    <div class="page-header">
+                        <h2><i class="fas fa-server"></i> Server Status</h2>
+                    </div>
+                    
+                    <div class="status-cards">
+                        <div class="status-card">
+                            <div class="status-card-icon">
+                                <i class="fas fa-network-wired"></i>
+                            </div>
+                            <div class="status-card-content">
+                                <h3>Connection</h3>
+                                <div class="status-info">
+                                    <span class="status-label">Status:</span>
+                                    <span class="status-value status-online-text">Online</span>
+                                </div>
+                                <div class="status-info">
+                                    <span class="status-label">Port:</span>
+                                    <span class="status-value">8080</span>
+                                </div>
+                                <div class="status-info">
+                                    <span class="status-label">Address:</span>
+                                    <span class="status-value">localhost</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="status-card">
+                            <div class="status-card-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="status-card-content">
+                                <h3>Performance</h3>
+                                <div class="status-info">
+                                    <span class="status-label">Uptime:</span>
+                                    <span class="status-value" id="uptime">0s</span>
+                                </div>
+                                <div class="status-info">
+                                    <span class="status-label">Active Sessions:</span>
+                                    <span class="status-value">0</span>
+                                </div>
+                                <div class="status-info">
+                                    <span class="status-label">Memory Usage:</span>
+                                    <span class="status-value">0 MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="api-endpoints">
+                        <h3>API Endpoints</h3>
+                        <div class="endpoint-list">
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <code>/api/status</code>
+                                <span class="endpoint-desc">Server status</span>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <code>/api/media/list</code>
+                                <span class="endpoint-desc">List all media</span>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <code>/api/media/scan</code>
+                                <span class="endpoint-desc">Rescan library</span>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <code>/api/media/:id</code>
+                                <span class="endpoint-desc">Get media details</span>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <code>/api/session/create</code>
+                                <span class="endpoint-desc">Create playback session</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Page -->
+                <div id="settings-page" class="page">
+                    <div class="page-header">
+                        <h2><i class="fas fa-cog"></i> Settings</h2>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h3>Server Configuration</h3>
+                        <div class="setting-item">
+                            <label for="server-port">Server Port</label>
+                            <input type="number" id="server-port" value="8080" min="1024" max="65535">
+                            <button class="btn btn-small" id="save-port-btn">Save</button>
+                        </div>
+                        <div class="setting-item">
+                            <label for="media-path">Media Directory</label>
+                            <input type="text" id="media-path" value="./media" readonly>
+                            <button class="btn btn-small" id="change-media-btn">Change</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Player Settings</h3>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="auto-play" checked>
+                                Auto-play next media
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="loop-playback">
+                                Loop playback
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label>Default Volume</label>
+                            <input type="range" id="default-volume" min="0" max="100" value="80">
+                            <span id="volume-value">80%</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>About</h3>
+                        <div class="about-info">
+                            <p><strong>Version:</strong> 1.0.0</p>
+                            <p><strong>Build Date:</strong> <span id="build-date">2024-12-22</span></p>
+                            <p><strong>Author:</strong> Media Server Team</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Media Details Modal -->
+                <div id="media-details-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Media Details</h3>
+                            <button class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body" id="media-details-content">
+                            <!-- Media details will be loaded here -->
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-primary" id="play-btn">
+                                <i class="fas fa-play"></i> Play
+                            </button>
+                            <button class="btn btn-secondary modal-close">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Toast Notifications -->
+        <div id="toast-container"></div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="/js/utils.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
