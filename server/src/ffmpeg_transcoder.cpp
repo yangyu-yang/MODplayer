@@ -44,15 +44,16 @@ std::string FFmpegTranscoder::build_ffmpeg_command() const {
     
     cmd << "ffmpeg -y -i \"" << config_.input_path << "\" "
         << "-c:v libx264 -c:a aac "
-        << "-preset ultrafast "  // 使用ultrafast加速编码
+        << "-preset ultrafast "
         << "-crf 23 "
         << "-maxrate 2000k -bufsize 4000k "
         << "-pix_fmt yuv420p "
         << "-g 48 -keyint_min 48 "
         << "-sc_threshold 0 "
         << "-hls_time " << config_.segment_duration << " "
-        << "-hls_list_size " << config_.max_segments << " "
+        << "-hls_list_size 0 "
         << "-hls_flags delete_segments "
+        << "-hls_playlist_type vod "
         << "-hls_segment_filename \"" << config_.output_dir << "/segments/segment_%03d.ts\" "
         << "\"" << config_.output_dir << "/playlist.m3u8\"";
     
