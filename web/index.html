@@ -667,7 +667,7 @@
                     mediaItem.innerHTML = `
                         <div class="media-info">
                             <h3>${escapeHtml(media.filename)}</h3>
-                            <p>时长: ${formatDuration(media.duration)} | 大小: ${formatFileSize(media.size || 0)}</p>
+                            <p>时长: ${formatDuration(media.duration)} | 大小: ${media.size ? formatFileSize(media.size) : '未知'}</p>
                             ${media.video_codec ? `<p>视频: ${escapeHtml(media.video_codec)} | 音频: ${escapeHtml(media.audio_codec || '无')}</p>` : ''}
                         </div>
                         <button class="play-btn" onclick="playMedia('${escapeHtml(media.id)}', '${escapeHtml(media.filename.replace(/'/g, "\\'"))}')">

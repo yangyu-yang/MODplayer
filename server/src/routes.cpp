@@ -193,6 +193,7 @@ void setup_routes(SimpleServer& server) {
 				ss << "\"filename\":\"" << file.filename << "\",";
 				ss << "\"path\":\"" << file.path << "\",";
 				ss << "\"duration\":\"" << file.duration << "\",";
+				ss << "\"size\":\"" << file.size << "\",";
 				ss << "\"width\":\"" << file.width << "\",";
 				ss << "\"height\":\"" << file.height << "\",";
 				ss << "\"video_codec\":\"" << file.video_codec << "\",";
