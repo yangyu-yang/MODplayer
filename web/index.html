@@ -3,263 +3,969 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Server</title>
-    <link rel="stylesheet" href="/css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Media Server - 实时HLS播放</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.1.5/dist/hls.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(90deg, #2c3e50, #4a6491);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 5px;
+        }
+        
+        header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab.active {
+            background: #f0f5ff;
+            border-bottom: 3px solid #667eea;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .tab:hover:not(.active) {
+            background: #f8f9fa;
+        }
+        
+        .page {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .media-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .media-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .media-item:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .media-info h3 {
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+        
+        .media-info p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .play-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.3s;
+        }
+        
+        .play-btn:hover {
+            background: #45a049;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .player-container {
+            background: black;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .video-player {
+            width: 100%;
+            max-height: 70vh;
+            display: block;
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .player-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.3s;
+        }
+        
+        .control-btn:hover:not(:disabled) {
+            background: #5a6fd8;
+        }
+        
+        .control-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .control-btn.stop {
+            background: #f44336;
+        }
+        
+        .control-btn.stop:hover:not(:disabled) {
+            background: #e53935;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .info-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .info-card h3 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+        
+        .status-ready { background: #4CAF50; color: white; }
+        .status-error { background: #f44336; color: white; }
+        .status-processing { background: #ff9800; color: white; }
+        
+        .log {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 3px 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .log-info { color: #4ec9b0; }
+        .log-success { color: #4CAF50; }
+        .log-error { color: #f44336; }
+        
+        .message {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .message.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .config-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .config-section h3 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        
+        .config-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .config-input input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .config-input button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .player-controls {
+                flex-direction: column;
+            }
+            
+            .control-btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .config-input {
+                flex-direction: column;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div id="app">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div class="logo">
-                    <i class="fas fa-play-circle"></i>
-                    <h1>Media Server</h1>
-                </div>
-                <div class="header-actions">
-                    <button id="refresh-btn" class="btn btn-secondary">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-                    <div class="server-status">
-                        <span class="status-dot status-online"></span>
-                        <span>Server Online</span>
-                    </div>
-                </div>
-            </div>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-play-circle"></i> Media Server</h1>
+            <p>实时HLS转码与播放</p>
         </header>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <div class="sidebar">
-                <nav class="sidebar-nav">
-                    <a href="#" class="nav-item active" data-page="media-list">
-                        <i class="fas fa-video"></i>
-                        <span>Media Library</span>
-                    </a>
-                    <a href="#" class="nav-item" data-page="server-status">
-                        <i class="fas fa-server"></i>
-                        <span>Server Status</span>
-                    </a>
-                    <a href="#" class="nav-item" data-page="settings">
-                        <i class="fas fa-cog"></i>
-                        <span>Settings</span>
-                    </a>
-                </nav>
-            </div>
-
-            <div class="content-area">
-                <!-- Media List Page -->
-                <div id="media-list-page" class="page active">
-                    <div class="page-header">
-                        <h2><i class="fas fa-video"></i> Media Library</h2>
-                        <div class="page-actions">
-                            <div class="search-box">
-                                <i class="fas fa-search"></i>
-                                <input type="text" id="search-input" placeholder="Search media...">
-                            </div>
-                            <button id="rescan-btn" class="btn btn-primary">
-                                <i class="fas fa-sync"></i> Rescan Library
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="stats-bar">
-                        <div class="stat-item">
-                            <span class="stat-label">Total Files</span>
-                            <span class="stat-value" id="total-files">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Total Size</span>
-                            <span class="stat-value" id="total-size">0 MB</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Formats</span>
-                            <span class="stat-value" id="total-formats">0</span>
-                        </div>
-                    </div>
-
-                    <div class="media-grid" id="media-grid">
-                        <!-- Media items will be loaded here -->
-                        <div class="loading-placeholder">
-                            <i class="fas fa-spinner fa-spin"></i>
-                            <p>Loading media files...</p>
-                        </div>
-                    </div>
-
-                    <div class="empty-state" id="empty-state" style="display: none;">
-                        <i class="fas fa-folder-open"></i>
-                        <h3>No Media Files Found</h3>
-                        <p>Your media library is empty. Add files to the "media" folder and click Rescan.</p>
-                        <button id="empty-rescan-btn" class="btn btn-primary">
-                            <i class="fas fa-sync"></i> Rescan Library
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Server Status Page -->
-                <div id="server-status-page" class="page">
-                    <div class="page-header">
-                        <h2><i class="fas fa-server"></i> Server Status</h2>
-                    </div>
-                    
-                    <div class="status-cards">
-                        <div class="status-card">
-                            <div class="status-card-icon">
-                                <i class="fas fa-network-wired"></i>
-                            </div>
-                            <div class="status-card-content">
-                                <h3>Connection</h3>
-                                <div class="status-info">
-                                    <span class="status-label">Status:</span>
-                                    <span class="status-value status-online-text">Online</span>
-                                </div>
-                                <div class="status-info">
-                                    <span class="status-label">Port:</span>
-                                    <span class="status-value">8080</span>
-                                </div>
-                                <div class="status-info">
-                                    <span class="status-label">Address:</span>
-                                    <span class="status-value">localhost</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="status-card">
-                            <div class="status-card-icon">
-                                <i class="fas fa-chart-line"></i>
-                            </div>
-                            <div class="status-card-content">
-                                <h3>Performance</h3>
-                                <div class="status-info">
-                                    <span class="status-label">Uptime:</span>
-                                    <span class="status-value" id="uptime">0s</span>
-                                </div>
-                                <div class="status-info">
-                                    <span class="status-label">Active Sessions:</span>
-                                    <span class="status-value">0</span>
-                                </div>
-                                <div class="status-info">
-                                    <span class="status-label">Memory Usage:</span>
-                                    <span class="status-value">0 MB</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="api-endpoints">
-                        <h3>API Endpoints</h3>
-                        <div class="endpoint-list">
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
-                                <code>/api/status</code>
-                                <span class="endpoint-desc">Server status</span>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
-                                <code>/api/media/list</code>
-                                <span class="endpoint-desc">List all media</span>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
-                                <code>/api/media/scan</code>
-                                <span class="endpoint-desc">Rescan library</span>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
-                                <code>/api/media/:id</code>
-                                <span class="endpoint-desc">Get media details</span>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
-                                <code>/api/session/create</code>
-                                <span class="endpoint-desc">Create playback session</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Settings Page -->
-                <div id="settings-page" class="page">
-                    <div class="page-header">
-                        <h2><i class="fas fa-cog"></i> Settings</h2>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <h3>Server Configuration</h3>
-                        <div class="setting-item">
-                            <label for="server-port">Server Port</label>
-                            <input type="number" id="server-port" value="8080" min="1024" max="65535">
-                            <button class="btn btn-small" id="save-port-btn">Save</button>
-                        </div>
-                        <div class="setting-item">
-                            <label for="media-path">Media Directory</label>
-                            <input type="text" id="media-path" value="./media" readonly>
-                            <button class="btn btn-small" id="change-media-btn">Change</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-section">
-                        <h3>Player Settings</h3>
-                        <div class="setting-item">
-                            <label>
-                                <input type="checkbox" id="auto-play" checked>
-                                Auto-play next media
-                            </label>
-                        </div>
-                        <div class="setting-item">
-                            <label>
-                                <input type="checkbox" id="loop-playback">
-                                Loop playback
-                            </label>
-                        </div>
-                        <div class="setting-item">
-                            <label>Default Volume</label>
-                            <input type="range" id="default-volume" min="0" max="100" value="80">
-                            <span id="volume-value">80%</span>
-                        </div>
-                    </div>
-
-                    <div class="settings-section">
-                        <h3>About</h3>
-                        <div class="about-info">
-                            <p><strong>Version:</strong> 1.0.0</p>
-                            <p><strong>Build Date:</strong> <span id="build-date">2024-12-22</span></p>
-                            <p><strong>Author:</strong> Media Server Team</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Media Details Modal -->
-                <div id="media-details-modal" class="modal">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h3>Media Details</h3>
-                            <button class="modal-close">&times;</button>
-                        </div>
-                        <div class="modal-body" id="media-details-content">
-                            <!-- Media details will be loaded here -->
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn btn-primary" id="play-btn">
-                                <i class="fas fa-play"></i> Play
-                            </button>
-                            <button class="btn btn-secondary modal-close">Close</button>
-                        </div>
+        
+        <div class="tabs">
+            <div class="tab active" data-page="media">媒体库</div>
+            <div class="tab" data-page="player">播放器</div>
+            <div class="tab" data-page="config">配置</div>
+        </div>
+        
+        <!-- 媒体库页面 -->
+        <div id="media-page" class="page active">
+            <div class="card">
+                <h2><i class="fas fa-video"></i> 媒体库</h2>
+                <button class="refresh-btn" onclick="loadMedia()" id="refresh-btn">
+                    <i class="fas fa-sync-alt"></i> 刷新媒体库
+                </button>
+                
+                <div id="message" style="display: none;"></div>
+                
+                <div class="media-list" id="media-list">
+                    <div style="text-align: center; padding: 30px; color: #666;">
+                        <i class="fas fa-spinner fa-spin"></i> 加载中...
                     </div>
                 </div>
             </div>
-        </main>
-
-        <!-- Toast Notifications -->
-        <div id="toast-container"></div>
+        </div>
+        
+        <!-- 播放器页面 -->
+        <div id="player-page" class="page">
+            <div class="card">
+                <h2><i class="fas fa-play-circle"></i> 播放器</h2>
+                
+                <div class="player-controls">
+                    <button class="control-btn" id="create-stream" onclick="createStream()">
+                        <i class="fas fa-broadcast-tower"></i> 创建HLS流
+                    </button>
+                    <button class="control-btn stop" id="stop-stream" disabled onclick="stopStream()">
+                        <i class="fas fa-stop"></i> 停止流
+                    </button>
+                    <button class="control-btn" id="play-btn" disabled onclick="playVideo()">
+                        <i class="fas fa-play"></i> 播放
+                    </button>
+                    <button class="control-btn" id="pause-btn" disabled onclick="pauseVideo()">
+                        <i class="fas fa-pause"></i> 暂停
+                    </button>
+                </div>
+                
+                <div class="player-container">
+                    <div id="loading-overlay" class="loading-overlay">
+                        <div class="spinner"></div>
+                        <p>准备流媒体...</p>
+                    </div>
+                    <video id="video-player" class="video-player" controls playsinline></video>
+                </div>
+                
+                <div class="info-grid" id="stream-info">
+                    <div class="info-card">
+                        <h3>流状态</h3>
+                        <p>未选择媒体文件</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="config-section">
+                <h3><i class="fas fa-info-circle"></i> API连接信息</h3>
+                <p>后端API端点:</p>
+                <ul id="api-info">
+                    <li>媒体列表: <code id="media-api">/api/media/list</code></li>
+                    <li>创建HLS流: <code id="create-api">/api/hls/create?media_id={id}</code></li>
+                    <li>HLS流地址: <code id="stream-api">/hls/{stream_id}/playlist.m3u8</code></li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- 配置页面 -->
+        <div id="config-page" class="page">
+            <div class="card">
+                <h2><i class="fas fa-cog"></i> 服务器配置</h2>
+                
+                <div class="config-section">
+                    <h3>API配置</h3>
+                    <p>配置后端API的基础URL。如果不配置，默认使用相对路径（当前服务器）。</p>
+                    <div class="config-input">
+                        <input type="text" id="api-base" placeholder="http://localhost:8080" />
+                        <button onclick="saveApiBase()">保存</button>
+                    </div>
+                    <p id="current-api">当前API基础URL: <span id="api-base-display">相对路径（当前服务器）</span></p>
+                </div>
+                
+                <div class="config-section">
+                    <h3>连接测试</h3>
+                    <button class="control-btn" onclick="testConnection()">
+                        <i class="fas fa-plug"></i> 测试服务器连接
+                    </button>
+                    <div id="connection-result" style="margin-top: 10px;"></div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>系统日志</h3>
+                    <div class="log" id="log-output">
+                        <div class="log-entry log-info">[系统启动] 媒体播放器已初始化</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- JavaScript Files -->
-    <script src="/js/utils.js"></script>
-    <script src="/js/api.js"></script>
-    <script src="/js/app.js"></script>
+    <script>
+        // 全局变量
+        let currentMedia = null;
+        let currentStream = null;
+        let hls = null;
+        let apiBase = localStorage.getItem('apiBase') || '';
+        let logEntries = [
+            {type: 'info', message: '[系统启动] 媒体播放器已初始化'}
+        ];
+        
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 显示当前API配置
+            updateApiDisplay();
+            
+            // 加载媒体库
+            loadMedia();
+            
+            // 检查服务器连接
+            testConnection();
+            
+            // 更新日志显示
+            updateLogDisplay();
+        });
+        
+        // 页面切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                // 移除所有标签的活动状态
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                // 隐藏所有页面
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                
+                // 设置当前标签为活动状态
+                this.classList.add('active');
+                // 显示对应的页面
+                const pageId = this.getAttribute('data-page');
+                document.getElementById(pageId + '-page').classList.add('active');
+                
+                // 如果是播放器页面，更新流信息
+                if (pageId === 'player' && currentMedia) {
+                    updateStreamInfo(`已选择: ${currentMedia.filename}`);
+                }
+            });
+        });
+        
+        // 更新API显示
+        function updateApiDisplay() {
+            const apiBaseDisplay = document.getElementById('api-base-display');
+            const mediaApi = document.getElementById('media-api');
+            const createApi = document.getElementById('create-api');
+            const streamApi = document.getElementById('stream-api');
+            
+            if (apiBase) {
+                apiBaseDisplay.textContent = apiBase;
+                mediaApi.textContent = apiBase + '/api/media/list';
+                createApi.textContent = apiBase + '/api/hls/create?media_id={id}';
+                streamApi.textContent = apiBase + '/hls/{stream_id}/playlist.m3u8';
+            } else {
+                apiBaseDisplay.textContent = '相对路径（当前服务器）';
+                mediaApi.textContent = '/api/media/list';
+                createApi.textContent = '/api/hls/create?media_id={id}';
+                streamApi.textContent = '/hls/{stream_id}/playlist.m3u8';
+            }
+        }
+        
+        // 保存API基础URL
+        function saveApiBase() {
+            const input = document.getElementById('api-base');
+            const value = input.value.trim();
+            
+            if (value) {
+                // 确保URL以/结尾
+                apiBase = value.endsWith('/') ? value.slice(0, -1) : value;
+                localStorage.setItem('apiBase', apiBase);
+                input.value = '';
+                addLog('success', `API基础URL已设置为: ${apiBase}`);
+                updateApiDisplay();
+                showMessage('API配置已保存', 'success');
+            } else {
+                // 清空API基础URL
+                apiBase = '';
+                localStorage.removeItem('apiBase');
+                addLog('info', '已重置API基础URL为相对路径');
+                updateApiDisplay();
+                showMessage('API配置已重置', 'info');
+            }
+        }
+        
+        // 构建API URL
+        function buildApiUrl(endpoint) {
+            if (apiBase && !endpoint.startsWith('http')) {
+                return apiBase + endpoint;
+            }
+            return endpoint;
+        }
+        
+        // 显示消息
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="message ${type}"><i class="fas fa-info-circle"></i> ${text}</div>`;
+            messageDiv.style.display = 'block';
+            
+            // 5秒后自动隐藏
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // 加载媒体库
+        async function loadMedia() {
+            const mediaList = document.getElementById('media-list');
+            const refreshBtn = document.getElementById('refresh-btn');
+            
+            mediaList.innerHTML = '<div style="text-align: center; padding: 30px; color: #666;"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>';
+            refreshBtn.disabled = true;
+            
+            try {
+                const apiUrl = buildApiUrl('/api/media/list');
+                addLog('info', `获取媒体列表: ${apiUrl}`);
+                
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.media_files && data.media_files.length > 0) {
+                    displayMediaFiles(data.media_files);
+                    addLog('success', `加载了 ${data.media_files.length} 个媒体文件`);
+                } else {
+                    mediaList.innerHTML = '<div style="text-align: center; padding: 30px; color: #666;">媒体库中没有文件</div>';
+                    addLog('info', '媒体库为空');
+                }
+            } catch (error) {
+                console.error('加载媒体失败:', error);
+                mediaList.innerHTML = '<div style="text-align: center; padding: 30px; color: #f44336;">加载媒体文件失败: ' + error.message + '</div>';
+                addLog('error', '加载媒体文件失败: ' + error.message);
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+        
+        // 显示媒体文件
+        function displayMediaFiles(mediaFiles) {
+            const mediaList = document.getElementById('media-list');
+            
+            if (mediaFiles && mediaFiles.length > 0) {
+                mediaList.innerHTML = '';
+                
+                mediaFiles.forEach(media => {
+                    const mediaItem = document.createElement('div');
+                    mediaItem.className = 'media-item';
+                    mediaItem.innerHTML = `
+                        <div class="media-info">
+                            <h3>${escapeHtml(media.filename)}</h3>
+                            <p>时长: ${formatDuration(media.duration)} | 大小: ${formatFileSize(media.size || 0)}</p>
+                            ${media.video_codec ? `<p>视频: ${escapeHtml(media.video_codec)} | 音频: ${escapeHtml(media.audio_codec || '无')}</p>` : ''}
+                        </div>
+                        <button class="play-btn" onclick="playMedia('${escapeHtml(media.id)}', '${escapeHtml(media.filename.replace(/'/g, "\\'"))}')">
+                            <i class="fas fa-play"></i> 播放
+                        </button>
+                    `;
+                    mediaList.appendChild(mediaItem);
+                });
+            } else {
+                mediaList.innerHTML = '<div style="text-align: center; padding: 30px; color: #666;">媒体库中没有文件</div>';
+            }
+        }
+        
+        // 播放媒体
+        function playMedia(mediaId, filename) {
+            currentMedia = { id: mediaId, filename: filename };
+            
+            // 切换到播放器页面
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelector('.tab[data-page="player"]').classList.add('active');
+            document.getElementById('player-page').classList.add('active');
+            
+            // 更新状态
+            updateStreamInfo(`已选择: ${filename} - 点击"创建HLS流"开始转码和播放`);
+            
+            // 启用创建流按钮
+            document.getElementById('create-stream').disabled = false;
+            
+            addLog('info', `选择媒体: ${filename} (ID: ${mediaId})`);
+        }
+        
+        // 创建HLS流
+        async function createStream() {
+            if (!currentMedia) {
+                showMessage('请先选择媒体文件', 'error');
+                return;
+            }
+            
+            const createBtn = document.getElementById('create-stream');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            
+            addLog('info', `创建HLS流: ${currentMedia.filename}`);
+            createBtn.disabled = true;
+            loadingOverlay.style.display = 'flex';
+            
+            try {
+                const apiUrl = buildApiUrl(`/api/hls/create?media_id=${encodeURIComponent(currentMedia.id)}`);
+                addLog('info', `调用API: ${apiUrl}`);
+                
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.stream_id) {
+                    currentStream = { id: data.stream_id };
+                    updateStreamInfo(`HLS流创建成功: ${currentStream.id}<br>正在准备播放...`);
+                    
+                    // 启用控制按钮
+                    document.getElementById('stop-stream').disabled = false;
+                    document.getElementById('play-btn').disabled = false;
+                    document.getElementById('pause-btn').disabled = false;
+                    
+                    addLog('success', `HLS流创建成功: ${currentStream.id}`);
+                    
+                    // 开始播放
+                    startPlayback();
+                } else {
+                    throw new Error(data.error || '未知错误');
+                }
+            } catch (error) {
+                console.error('创建流失败:', error);
+                updateStreamInfo(`创建流失败: ${error.message}`);
+                addLog('error', '创建HLS流失败: ' + error.message);
+                createBtn.disabled = false;
+                loadingOverlay.style.display = 'none';
+                showMessage('创建流失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 开始播放
+        function startPlayback() {
+            if (!currentStream) {
+                return;
+            }
+            
+            const videoUrl = buildApiUrl(`/hls/${currentStream.id}/playlist.m3u8`);
+            const videoPlayer = document.getElementById('video-player');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            
+            addLog('info', `开始播放HLS流: ${videoUrl}`);
+            
+            if (Hls.isSupported()) {
+                if (hls) {
+                    hls.destroy();
+                }
+                
+                hls = new Hls();
+                hls.loadSource(videoUrl);
+                hls.attachMedia(videoPlayer);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    updateStreamInfo(`播放就绪: ${currentMedia.filename}<br>流ID: ${currentStream.id}`);
+                    loadingOverlay.style.display = 'none';
+                    addLog('success', 'HLS流已加载，可以播放');
+                    
+                    // 尝试自动播放
+                    videoPlayer.play().then(() => {
+                        addLog('info', '视频开始播放');
+                    }).catch(e => {
+                        addLog('info', '自动播放被阻止，请手动点击播放按钮');
+                    });
+                });
+                
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    console.error('HLS错误:', data);
+                    updateStreamInfo(`播放错误: ${data.details}`);
+                    addLog('error', `HLS错误: ${data.details}`);
+                    
+                    if (data.fatal) {
+                        loadingOverlay.style.display = 'none';
+                    }
+                });
+            } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari支持原生HLS
+                videoPlayer.src = videoUrl;
+                videoPlayer.addEventListener('loadedmetadata', () => {
+                    updateStreamInfo(`播放就绪: ${currentMedia.filename}<br>流ID: ${currentStream.id}`);
+                    loadingOverlay.style.display = 'none';
+                    addLog('success', 'HLS流已加载，可以播放');
+                });
+            } else {
+                updateStreamInfo('您的浏览器不支持HLS播放');
+                loadingOverlay.style.display = 'none';
+                addLog('error', '浏览器不支持HLS播放');
+                showMessage('您的浏览器不支持HLS播放', 'error');
+            }
+        }
+        
+        // 停止流
+        async function stopStream() {
+            if (!currentStream) {
+                return;
+            }
+            
+            if (!confirm('确定要停止当前流吗? 所有观看者将无法继续观看。')) {
+                return;
+            }
+            
+            addLog('info', '停止HLS流...');
+            
+            try {
+                const apiUrl = buildApiUrl(`/api/hls/stop/${currentStream.id}`);
+                const response = await fetch(apiUrl);
+                
+                if (response.ok) {
+                    updateStreamInfo('HLS流已停止');
+                    addLog('success', 'HLS流已停止');
+                } else {
+                    addLog('warning', '停止HLS流API调用失败');
+                }
+            } catch (error) {
+                addLog('error', '停止HLS流失败: ' + error.message);
+            }
+            
+            // 清理播放器
+            cleanupPlayer();
+        }
+        
+        // 清理播放器
+        function cleanupPlayer() {
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            
+            const videoPlayer = document.getElementById('video-player');
+            videoPlayer.pause();
+            videoPlayer.src = '';
+            
+            currentStream = null;
+            
+            // 重置按钮状态
+            document.getElementById('stop-stream').disabled = true;
+            document.getElementById('play-btn').disabled = true;
+            document.getElementById('pause-btn').disabled = true;
+            document.getElementById('create-stream').disabled = false;
+            
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.style.display = 'none';
+        }
+        
+        // 播放视频
+        function playVideo() {
+            const videoPlayer = document.getElementById('video-player');
+            videoPlayer.play().then(() => {
+                addLog('info', '视频开始播放');
+            }).catch(e => {
+                addLog('error', '播放失败: ' + e.message);
+                showMessage('播放失败: ' + e.message, 'error');
+            });
+        }
+        
+        // 暂停视频
+        function pauseVideo() {
+            const videoPlayer = document.getElementById('video-player');
+            videoPlayer.pause();
+            addLog('info', '视频已暂停');
+        }
+        
+        // 更新流信息
+        function updateStreamInfo(message) {
+            document.getElementById('stream-info').innerHTML = `
+                <div class="info-card">
+                    <h3>流状态</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+        
+        // 测试服务器连接
+        async function testConnection() {
+            const resultDiv = document.getElementById('connection-result');
+            resultDiv.innerHTML = '<div class="message info"><i class="fas fa-spinner fa-spin"></i> 测试连接中...</div>';
+            
+            try {
+                const apiUrl = buildApiUrl('/api/media/list');
+                addLog('info', `测试连接: ${apiUrl}`);
+                
+                const response = await fetch(apiUrl);
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="message success"><i class="fas fa-check-circle"></i> 服务器连接成功</div>';
+                    addLog('success', '服务器连接测试成功');
+                } else {
+                    resultDiv.innerHTML = `<div class="message error"><i class="fas fa-times-circle"></i> 服务器返回错误: HTTP ${response.status}</div>`;
+                    addLog('error', `服务器连接测试失败: HTTP ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="message error"><i class="fas fa-times-circle"></i> 连接失败: ${error.message}</div>`;
+                addLog('error', '服务器连接测试失败: ' + error.message);
+            }
+        }
+        
+        // 添加日志
+        function addLog(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = {
+                type,
+                message: `[${timestamp}] ${message}`,
+                timestamp: Date.now()
+            };
+            
+            logEntries.push(entry);
+            updateLogDisplay();
+        }
+        
+        // 更新日志显示
+        function updateLogDisplay() {
+            const logOutput = document.getElementById('log-output');
+            // 只显示最近的20条日志
+            const recentLogs = logEntries.slice(-20);
+            
+            logOutput.innerHTML = recentLogs.map(log => 
+                `<div class="log-entry log-${log.type}">${escapeHtml(log.message)}</div>`
+            ).join('');
+            
+            // 自动滚动到底部
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+        
+        // 格式化持续时间
+        function formatDuration(seconds) {
+            if (!seconds) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // HTML转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
 </body>
 </html>
